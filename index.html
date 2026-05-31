@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1"/>
+<title>A330 IPC</title>
+<link rel="manifest" href="manifest.webmanifest"/>
+<meta name="theme-color" content="#020817"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="A330 IPC"/>
+<link rel="apple-touch-icon" href="icon-180.png"/>
+<link rel="icon" type="image/png" sizes="512x512" href="icon-512.png"/>
+<script src="pako.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-text-size-adjust:100%}
+body{background:#020817;color:#E2E8F0;font-family:'IBM Plex Sans',-apple-system,system-ui,sans-serif;min-height:100vh;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:1000px;margin:0 auto;padding:env(safe-area-inset-top) calc(16px + env(safe-area-inset-right)) 60px calc(16px + env(safe-area-inset-left))}
+.hdr{display:flex;align-items:center;gap:12px;padding:24px 0 16px;border-bottom:1px solid #1E293B;margin-bottom:18px}
+.logo{width:38px;height:38px;border-radius:6px;background:linear-gradient(135deg,#3B82F6,#1D4ED8);display:flex;align-items:center;justify-content:center;font-size:20px}
+.title{font-family:'IBM Plex Mono',monospace;font-size:16px;font-weight:700;color:#F8FAFC;letter-spacing:.5px}
+.sub{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#64748B;letter-spacing:1px}
+.stat{margin-left:auto;text-align:right;font-family:'IBM Plex Mono',monospace}
+.stat .n{font-size:22px;font-weight:700;color:#475569}
+.stat .l{font-size:10px;color:#475569}
+.searchbar{display:flex;gap:10px;background:#0A1628;border:1px solid #1E3A5F;border-radius:8px;padding:4px 4px 4px 14px;margin-bottom:12px}
+.searchbar input{flex:1;background:transparent;border:none;color:#E2E8F0;font-size:16px;padding:12px 0;font-family:inherit}
+.searchbar input:focus{outline:none}
+.btn{border:none;border-radius:6px;padding:0 22px;font-size:13px;font-weight:700;cursor:pointer;font-family:'IBM Plex Mono',monospace;letter-spacing:.5px;color:#fff;background:linear-gradient(135deg,#3B82F6,#1D4ED8)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px;align-items:center}
+.chip{font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;border-radius:4px;padding:6px 11px;color:#475569;background:#0F172A;border:1px solid #1E293B}
+.meta{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#475569;margin-bottom:10px}
+.iphead{display:grid;gap:8px;padding:0 12px 6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#475569;letter-spacing:1px}
+.iprow{display:grid;gap:8px;align-items:center;padding:11px 12px;border-radius:4px;margin-bottom:4px;animation:fade .2s ease}
+.cols-part{grid-template-columns:minmax(120px,1.3fr) minmax(140px,1.8fr) 110px 56px 44px}
+.cols-fin{grid-template-columns:90px minmax(110px,1.2fr) minmax(130px,1.6fr) 110px 44px}
+.ippn{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:#E2E8F0;word-break:break-all}
+.ipname{font-size:13px;color:#CBD5E1}
+.ipmono{font-family:'IBM Plex Mono',monospace;font-size:11px}
+.empty{text-align:center;padding:46px 0;color:#475569;font-family:'IBM Plex Mono',monospace;font-size:13px}
+.spin{width:18px;height:18px;border:2px solid #334155;border-top-color:#3B82F6;border-radius:50%;display:inline-block;animation:sp .8s linear infinite;vertical-align:middle}
+@keyframes sp{to{transform:rotate(360deg)}}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+mark{padding:0}
+.modal{position:fixed;inset:0;background:rgba(2,8,23,.9);z-index:100;display:flex;align-items:center;justify-content:center;padding:12px}
+.modalbox{background:#0A1628;border:1px solid #3B82F655;border-radius:10px;max-width:960px;width:100%;max-height:94vh;display:flex;flex-direction:column;overflow:hidden}
+.modalhdr{display:flex;align-items:center;gap:10px;padding:12px 15px;border-bottom:1px solid #1E293B;flex-wrap:wrap}
+.badge{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:700;color:#3B82F6;background:#3B82F618;border:1px solid #3B82F655;border-radius:3px;padding:3px 9px}
+.svgarea{flex:1 1 40%;overflow:auto;background:#fff;display:flex;align-items:center;justify-content:center;min-height:200px;-webkit-overflow-scrolling:touch}
+.svgarea img{max-width:100%;height:auto;display:block}
+.pager{display:flex;align-items:center;justify-content:center;gap:16px;padding:8px;border-top:1px solid #1E293B;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#94A3B8}
+.pbtn{background:#1E293B;border:1px solid #334155;color:#93C5FD;border-radius:5px;padding:6px 14px;font-family:'IBM Plex Mono',monospace;font-size:12px;cursor:pointer}
+.pbtn:disabled{background:#0F172A;color:#334155}
+.xbtn{margin-left:auto;background:none;border:none;color:#64748B;font-size:22px;cursor:pointer;line-height:1}
+.plist{flex:1 1 46%;overflow:auto;border-top:1px solid #1E293B;background:#020817;-webkit-overflow-scrolling:touch}
+.plhead{display:grid;grid-template-columns:58px minmax(120px,1.4fr) minmax(130px,1.6fr) 64px 50px;gap:8px;padding:8px 14px;position:sticky;top:0;background:#0A1628;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#475569;letter-spacing:1px;border-bottom:1px solid #1E293B}
+.plrow{display:grid;grid-template-columns:58px minmax(120px,1.4fr) minmax(130px,1.6fr) 64px 50px;gap:8px;padding:8px 14px;align-items:center}
+.foot{margin-top:36px;padding-top:18px;border-top:1px solid #0F172A;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#1E293B}
+::-webkit-scrollbar{width:7px}::-webkit-scrollbar-track{background:#0F172A}::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hdr">
+    <div class="logo">⚙</div>
+    <div>
+      <div class="title">A330 / RR TRENT 700 — IPC</div>
+      <div class="sub">PART · NAME · PANEL · FIN · FIGURES</div>
+    </div>
+    <div class="stat"><div class="n" id="statNum">…</div><div class="l">UNIQUE P/N</div></div>
+  </div>
+  <div id="panel"><div class="empty"><span class="spin"></span> Loading parts index…</div></div>
+  <div class="foot">A330-343 · MSN F1420 / F1445 / F1527 · RR TRENT 772B-60 · figures load per chapter on demand</div>
+</div>
+<div id="modalRoot"></div>
+
+<script>
+"use strict";
+const ATA_COLORS={"11":"#F59E0B","21":"#06B6D4","22":"#8B5CF6","23":"#EC4899","24":"#3B82F6","25":"#A855F7","26":"#EF4444","27":"#10B981","28":"#F97316","29":"#14B8A6","30":"#6366F1","31":"#0EA5E9","32":"#EAB308","33":"#D946EF","34":"#818CF8","35":"#2DD4BF","36":"#F43F5E","38":"#22D3EE","49":"#84CC16","52":"#FB7185","53":"#FBBF24","54":"#A3E635","55":"#34D399","56":"#60A5FA","57":"#C084FC","71":"#22D3EE","72":"#FB923C","73":"#4ADE80","78":"#E879F9","79":"#FACC15"};
+const ataColor=ch=>ATA_COLORS[(ch||"").slice(0,2)]||"#94A3B8";
+const esc=s=>(s||"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const normPN=s=>(s||"").toUpperCase().replace(/[\s\-_.]/g,"");
+
+/* record array layout:
+ [0]pn [1]mfr [2]name [3]item [4]ipcRef [5]chap [6]figTitle [7]upa [8]eff [9]sheets [10]pans [11]figRef */
+const STATE={records:[],pnNorms:[],namesLow:[],pansNorm:[],fins:[],
+  query:"",submitted:"",mode:"auto",chap:"ALL",
+  selected:null,selSheet:0,figCache:{},packCache:{},chunkManifest:null,
+  figByRef:{},pnFirstFig:{},lastResults:[]};
+const $=id=>document.getElementById(id);
+
+async function fetchGz(url){
+  const res=await fetch(url);
+  if(!res.ok)throw new Error("HTTP "+res.status+" for "+url);
+  const buf=new Uint8Array(await res.arrayBuffer());
+  let text; try{text=pako.ungzip(buf,{to:"string"});}catch(e){text=new TextDecoder().decode(buf);}
+  return JSON.parse(text);
+}
+
+async function init(){
+  try{
+    const data=await fetchGz("ipc_index.json.gz");
+    STATE.records=data;
+    const N=data.length;
+    STATE.pnNorms=new Array(N); STATE.namesLow=new Array(N); STATE.pansNorm=new Array(N);
+    for(let i=0;i<N;i++){
+      STATE.pnNorms[i]=normPN(data[i][0]);
+      STATE.namesLow[i]=(data[i][2]||"").toLowerCase();
+      STATE.pansNorm[i]=(data[i][10]||[]).map(normPN);
+      // figByRef + first illustrated occurrence per P/N
+      const fr=data[i][11];
+      if(fr){(STATE.figByRef[fr]=STATE.figByRef[fr]||[]).push(i);}
+    }
+    // sort each figure's items in IPC order
+    for(const k in STATE.figByRef){
+      STATE.figByRef[k].sort((a,b)=>(data[a][3]||"").localeCompare(data[b][3]||"",undefined,{numeric:true}));
+    }
+    // try to load FIN list if hosted (optional)
+    try{ STATE.fins=await fetchGz("fin_list.json.gz"); }catch(e){ STATE.fins=[]; }
+    const uniq=new Set(data.map(r=>r[0])).size;
+    $("statNum").textContent=uniq.toLocaleString(); $("statNum").style.color="#10B981";
+    renderUI();
+  }catch(e){
+    $("panel").innerHTML='<div class="empty">Could not load parts index.<br>'+esc(e.message)+'<br><br>Make sure ipc_index.json.gz is hosted next to this page.</div>';
+  }
+}
+
+function chapters(){const m={};for(const r of STATE.records)if(r[5])m[r[5]]=true;return Object.keys(m).sort();}
+
+function renderUI(){
+  const chs=chapters();
+  const MODES=[["auto","AUTO"],["pn","PART No."],["name","NAME"],["panel","PANEL"]].concat(STATE.fins.length?[["fin","FIN"]]:[]);
+  const ph=STATE.mode==="fin"?"FIN (e.g. 5100KB) or system / designation…":STATE.mode==="panel"?"Panel / access door number (e.g. 191HB, 461CL)…":"Part number (e.g. NSA8206-012) or name (o-ring, valve, bracket)…";
+  $("panel").innerHTML=`
+    <div class="searchbar">
+      <input id="q" placeholder="${ph}" value="${esc(STATE.query)}"/>
+      <button class="btn" onclick="doSearch()">SEARCH</button>
+    </div>
+    <div class="chips">
+      <span style="font-size:11px;color:#475569;font-family:'IBM Plex Mono',monospace;margin-right:4px">BY:</span>
+      ${MODES.map(([m,l])=>`<span class="chip" onclick="setMode('${m}')" style="${chipCss(STATE.mode===m,m==='fin'||m==='panel'?'#FBBF24':'#3B82F6')}">${l}</span>`).join("")}
+    </div>
+    ${STATE.mode!=="fin"?`<div class="chips" id="chapChips">
+      <span class="chip" data-c="ALL" style="${chipCss(STATE.chap==='ALL','#94A3B8')}">ALL</span>
+      ${chs.map(c=>`<span class="chip" data-c="${c}" style="${chipCss(STATE.chap===c,ataColor(c))}">${c}</span>`).join("")}
+    </div>`:""}
+    <div id="results"></div>`;
+  const q=$("q");
+  q.oninput=e=>STATE.query=e.target.value;
+  q.onkeydown=e=>{if(e.key==="Enter")doSearch();};
+  const cc=$("chapChips"); if(cc)cc.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{STATE.chap=c.dataset.c;renderUI();$("q").value=STATE.query;if(STATE.submitted)doSearch();});
+  if(STATE.submitted){$("q").value=STATE.query;renderResults();}
+  else $("results").innerHTML=`<div class="empty">${STATE.records.length.toLocaleString()} parts ready. Search by part number, name, panel${STATE.fins.length?", or FIN":""}.</div>`;
+}
+function setMode(m){STATE.mode=m;renderUI();if(STATE.submitted)doSearch();}
+function doSearch(){STATE.submitted=STATE.query=$("q").value;renderResults();}
+
+function renderResults(){
+  const box=$("results"); if(!box)return;
+  const raw=STATE.submitted.trim(); if(!raw){box.innerHTML="";return;}
+  if(STATE.mode==="fin"){renderFIN(raw,box);return;}
+  const qN=normPN(raw),qL=raw.toLowerCase(); const terms=(qL.match(/[a-z0-9]+/g)||[]);
+  const R=STATE.records,PN=STATE.pnNorms,NM=STATE.namesLow,PA=STATE.pansNorm;
+  const scored=[];
+  for(let i=0;i<R.length;i++){
+    if(STATE.chap!=="ALL"&&R[i][5]!==STATE.chap)continue;
+    let s=0;
+    if((STATE.mode==="panel"||STATE.mode==="auto")&&PA[i].length&&qN.length>=2){
+      let best=0; for(const p of PA[i]){if(p===qN)best=Math.max(best,1100);else if(p.startsWith(qN))best=Math.max(best,450);else if(p.includes(qN))best=Math.max(best,160);} s+=best;
+    }
+    if((STATE.mode==="pn"||STATE.mode==="auto")&&qN.length>=2){const p=PN[i];if(p===qN)s+=1000;else if(p.startsWith(qN))s+=400;else if(p.includes(qN))s+=150;}
+    if(STATE.mode==="name"||STATE.mode==="auto"){const nl=NM[i];
+      if(nl===qL)s+=800;else if(nl.startsWith(qL))s+=300;
+      else{let all=terms.length>0;for(const t of terms){if(t.length>=2&&!nl.includes(t)){all=false;break;}}if(all)s+=120;else if(qL&&nl.includes(qL))s+=80;}}
+    if(s>0)scored.push([s,i]);
+  }
+  scored.sort((a,b)=>b[0]-a[0]||R[a[1]][0].localeCompare(R[b[1]][0]));
+  const top=scored.slice(0,200).map(x=>x[1]); STATE.lastResults=top;
+  let html=`<div class="meta">${scored.length.toLocaleString()} MATCH${scored.length!==1?"ES":""}${scored.length>200?" (top 200)":""}</div>`;
+  if(!top.length){box.innerHTML=html+`<div class="empty">No matching parts.</div>`;return;}
+  html+=`<div class="iphead cols-part"><span>PART No. · MFR</span><span>NOMENCLATURE</span><span>IPC REF</span><span>ITEM</span><span style="text-align:right">FIG</span></div>`;
+  html+=top.map((idx,n)=>{
+    const r=R[idx],col=ataColor(r[5]),hasFig=r[9]&&r[9].length;
+    const pan=(r[10]&&r[10].length)?`<span style="margin-left:6px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#38BDF8;border:1px solid #38BDF855;border-radius:3px;padding:1px 5px">PANEL ${esc(r[10].join(", "))}</span>`:"";
+    return `<div class="iprow cols-part" style="background:${n%2?'#0C1322':'#0F172A'};border-left:3px solid ${col};cursor:${hasFig?'pointer':'default'}" ${hasFig?`onclick="openFig(${idx})"`:""}>
+      <div class="ippn">${hlHTML(r[0],terms)}${r[1]?`<span style="color:#475569;font-weight:400;font-size:11px"> · ${esc(r[1])}</span>`:""}</div>
+      <div class="ipname">${hlHTML(r[2]||"—",terms)}${pan}</div>
+      <div class="ipmono" style="color:${col}">${esc(r[4])}</div>
+      <div class="ipmono" style="color:#64748B">it ${esc(r[3])}</div>
+      <div class="ipmono" style="text-align:right">${hasFig?`<span style="color:${col};border:1px solid ${col}55;border-radius:3px;padding:2px 5px;font-size:10px">FIG</span>`:`<span style="color:#475569">${r[7]?"×"+parseInt(r[7],10):"—"}</span>`}</div>
+    </div>`;
+  }).join("");
+  box.innerHTML=html;
+}
+
+function renderFIN(raw,box){
+  const qN=normPN(raw),qL=raw.toLowerCase();const terms=(qL.match(/[a-z0-9]+/g)||[]);
+  const scored=[];
+  for(const f of STATE.fins){
+    let s=0;const fn=normPN(f.fin);
+    if(qN.length>=1){if(fn===qN)s+=1000;else if(fn.startsWith(qN))s+=500;else if(fn.includes(qN))s+=200;}
+    if(s===0){const blob=((f.designation||"")+" "+(f.circuit||"")+" "+(f.ataTitle||"")+" "+(f.pn||"")).toLowerCase();
+      let all=terms.length>0;for(const t of terms){if(t.length>=2&&!blob.includes(t)){all=false;break;}}if(all)s+=60;}
+    if(s>0)scored.push([s,f]);
+  }
+  scored.sort((a,b)=>b[0]-a[0]);
+  const top=scored.slice(0,200).map(x=>x[1]);
+  let html=`<div class="meta">${scored.length.toLocaleString()} FIN MATCH${scored.length!==1?"ES":""}${scored.length>200?" (top 200)":""}</div>`;
+  if(!top.length){box.innerHTML=html+`<div class="empty">No matching FIN.</div>`;return;}
+  html+=`<div class="iphead cols-fin"><span>FIN</span><span>PART No.</span><span>DESIGNATION</span><span>ATA · CIR</span><span style="text-align:right">FIG</span></div>`;
+  html+=top.map((f,n)=>{
+    const col=ataColor(f.ata);
+    const fi=STATE.pnFirstFig[normPN(f.pn)];
+    const hasFig=fi!=null;
+    return `<div class="iprow cols-fin" style="background:${n%2?'#0C1322':'#0F172A'};border-left:3px solid ${col};cursor:${hasFig?'pointer':'default'}" ${hasFig?`onclick="openFig(${fi})"`:""}>
+      <div class="ipmono" style="color:#FBBF24;font-weight:700;font-size:13px">${hlHTML(f.fin,terms)}</div>
+      <div class="ippn" style="font-size:12px">${hlHTML(f.pn||"—",terms)}</div>
+      <div class="ipname">${hlHTML(f.designation||"—",terms)}</div>
+      <div class="ipmono" style="color:${col}">${esc(f.ata||"")}${f.circuit?" · "+esc(f.circuit):""}</div>
+      <div class="ipmono" style="text-align:right">${hasFig?`<span style="color:${col};border:1px solid ${col}55;border-radius:3px;padding:2px 5px;font-size:10px">FIG</span>`:`<span style="color:#475569">${f.uc?"×"+f.uc:"—"}</span>`}</div>
+    </div>`;
+  }).join("");
+  box.innerHTML=html;
+}
+
+/* figure packs */
+function packForGnbr(g){const m=g.match(/G_PC_(\d{2})\d{4}_/);return m?m[1]:"00";}
+async function loadChunkManifest(){if(STATE.chunkManifest)return STATE.chunkManifest;try{const r=await fetch("figs/_chunks.json");STATE.chunkManifest=r.ok?await r.json():{};}catch(e){STATE.chunkManifest={};}return STATE.chunkManifest;}
+async function loadPack(chap){
+  if(STATE.packCache[chap])return STATE.packCache[chap];
+  const man=await loadChunkManifest();const n=man[chap]||1;
+  const p=(async()=>{
+    if(n===1)return await fetchGz("figs/fig_"+chap+".json.gz");
+    const merged={};for(let c=0;c<n;c++){try{Object.assign(merged,await fetchGz("figs/fig_"+chap+"_"+c+".json.gz"));}catch(e){}}return merged;
+  })();
+  STATE.packCache[chap]=p;return p;
+}
+async function getSvg(gnbr){
+  if(STATE.figCache[gnbr])return STATE.figCache[gnbr];
+  const pack=await loadPack(packForGnbr(gnbr));let svg=pack[gnbr];if(!svg)return null;
+  // clean prolog/DOCTYPE leftovers that break inline rendering
+  svg=svg.replace(/<\?xml[^>]*\?>/gi,"").replace(/<!DOCTYPE[^>]*>/gi,"").replace(/^\s*\]>/,"").replace(/^[\s\]>]+/,"").trim();
+  if(svg.indexOf("<svg")>0) svg=svg.slice(svg.indexOf("<svg"));
+  // Blob URL renders reliably in Safari (avoids data: # fragment issues)
+  let url;
+  try{ url=URL.createObjectURL(new Blob([svg],{type:"image/svg+xml"})); }
+  catch(e){ url="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg); }
+  STATE.figCache[gnbr]=url;return url;
+}
+
+function openFig(idx){STATE.selected=idx;STATE.selSheet=0;renderModal();}
+function closeFig(){STATE.selected=null;$("modalRoot").innerHTML="";}
+function renderModal(){
+  const R=STATE.records,r=R[STATE.selected];if(r==null){$("modalRoot").innerHTML="";return;}
+  const col=ataColor(r[5]);const sheets=r[9]||[];
+  const parts=(STATE.figByRef[r[11]]||[STATE.selected]);
+  let plist=parts.map(i=>{const p=R[i];const cur=i===STATE.selected;
+    return `<div class="plrow" id="plrow-${i}" onclick="selectItem(${i})" style="cursor:pointer;background:${cur?col+'22':''};border-left:${cur?'3px solid '+col:'3px solid transparent'}">
+      <span class="ipmono" style="color:${cur?col:'#3B82F6'};font-weight:${cur?700:600};text-decoration:underline">${esc(p[3])}</span>
+      <span class="ipmono" style="color:#E2E8F0;font-weight:600;font-size:12px;word-break:break-all">${esc(p[0])}${p[1]?`<span style="color:#475569;font-weight:400;font-size:10px"> · ${esc(p[1])}</span>`:""}</span>
+      <span style="font-size:12px;color:#CBD5E1">${esc(p[2]||"—")}</span>
+      <span class="ipmono" style="color:#38BDF8;font-size:10px">${esc((p[10]||[]).join(","))}</span>
+      <span class="ipmono" style="color:#94A3B8;text-align:right">${p[7]?"×"+parseInt(p[7],10):"—"}</span>
+    </div>`;}).join("");
+  $("modalRoot").innerHTML=`
+    <div class="modal" onclick="closeFig()">
+      <div class="modalbox" onclick="event.stopPropagation()">
+        <div class="modalhdr">
+          <span class="badge">${esc(r[4])}</span>
+          <span style="font-size:14px;color:#F1F5F9;font-weight:600">${esc(r[6])}</span>
+          <span class="ipmono" style="color:#64748B">${parts.length} part${parts.length!==1?"s":""} in figure</span>
+          <button class="xbtn" onclick="closeFig()">✕</button>
+        </div>
+        <div class="svgarea" id="svgArea"><div style="color:#64748B;font-family:'IBM Plex Mono',monospace;padding:40px"><span class="spin"></span> Loading figure…</div></div>
+        ${sheets.length>1?`<div class="pager"><button class="pbtn" id="pPrev" onclick="sheetNav(-1)">◂ PREV</button><span id="pLabel">SHEET 1 / ${sheets.length}</span><button class="pbtn" id="pNext" onclick="sheetNav(1)">NEXT ▸</button></div>`:""}
+        <div class="plist">
+          <div class="plhead"><span>ITEM</span><span>PART No.</span><span>NOMENCLATURE</span><span>PANEL</span><span style="text-align:right">QTY</span></div>
+          ${plist}
+        </div>
+      </div>
+    </div>`;
+  loadSheet();
+}
+async function loadSheet(){
+  const R=STATE.records,r=R[STATE.selected];const sheets=r[9]||[];const area=$("svgArea");if(!area)return;
+  const g=sheets[STATE.selSheet];
+  if(!g){area.innerHTML=`<div style="color:#64748B;font-family:'IBM Plex Mono',monospace;padding:40px;text-align:center">No illustration.</div>`;return;}
+  area.innerHTML=`<div style="color:#64748B;font-family:'IBM Plex Mono',monospace;padding:40px"><span class="spin"></span> Loading figure…</div>`;
+  try{
+    const url=await getSvg(g);
+    if(url){
+      STATE.curFigUrl=url;
+      area.innerHTML=`<img id="figImg" src="${url}" alt="${esc(r[6])}" style="cursor:zoom-in"/><div style="position:absolute;bottom:6px;right:10px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#94A3B8;background:#0A1628cc;border-radius:4px;padding:2px 7px;pointer-events:none">double-tap to enlarge</div>`;
+      area.style.position="relative";
+      const img=$("figImg");
+      let last=0;
+      const fire=()=>{const n=Date.now();if(n-last<350){expandFig();}last=n;};
+      img.addEventListener("click",fire);
+      img.addEventListener("touchend",fire);
+    } else {
+      area.innerHTML=`<div style="color:#64748B;font-family:'IBM Plex Mono',monospace;padding:40px;text-align:center">Illustration not found.</div>`;
+    }
+  }
+  catch(e){area.innerHTML=`<div style="color:#64748B;font-family:'IBM Plex Mono',monospace;padding:40px;text-align:center">Could not load figure.</div>`;}
+  const lbl=$("pLabel");if(lbl)lbl.textContent=`SHEET ${STATE.selSheet+1} / ${sheets.length}`;
+  const pv=$("pPrev"),nx=$("pNext");if(pv)pv.disabled=STATE.selSheet===0;if(nx)nx.disabled=STATE.selSheet===sheets.length-1;
+}
+function sheetNav(d){const sheets=STATE.records[STATE.selected][9]||[];STATE.selSheet=Math.max(0,Math.min(sheets.length-1,STATE.selSheet+d));loadSheet();}
+
+function expandFig(){
+  const url=STATE.curFigUrl; if(!url)return;
+  const ov=document.createElement("div");
+  ov.style.cssText="position:fixed;inset:0;z-index:200;background:#fff;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pinch-zoom;display:flex;align-items:center;justify-content:center";
+  // fit whole figure to screen (contain); pinch-zoom to magnify
+  ov.innerHTML=`<img src="${url}" style="max-width:100%;max-height:100%;width:auto;height:auto;display:block;margin:auto"/>
+    <button id="expClose" style="position:fixed;top:calc(12px + env(safe-area-inset-top));right:16px;z-index:201;background:#0A1628;color:#fff;border:none;border-radius:8px;width:46px;height:46px;font-size:22px;cursor:pointer;box-shadow:0 2px 10px rgba(0,0,0,.5)">✕</button>
+    <div style="position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);z-index:201;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#fff;background:#0A1628cc;border-radius:6px;padding:4px 12px;pointer-events:none">pinch to zoom · tap ✕ to close</div>`;
+  const close=()=>{ if(ov.parentNode)document.body.removeChild(ov); };
+  ov.querySelector("#expClose").addEventListener("click",(e)=>{e.stopPropagation();close();});
+  document.body.appendChild(ov);
+}
+
+function selectItem(i){
+  STATE.selected=i;
+  // re-render parts list highlight without reloading the figure sheet
+  const R=STATE.records,r=R[i];const col=ataColor(r[5]);
+  const parts=(STATE.figByRef[r[11]]||[i]);
+  for(const j of parts){
+    const row=$("plrow-"+j);if(!row)continue;
+    const cur=j===i;
+    row.style.background=cur?col+"22":"";
+    row.style.borderLeft=cur?"3px solid "+col:"3px solid transparent";
+    const itemSpan=row.querySelector(".ipmono");
+    if(itemSpan){itemSpan.style.color=cur?col:"#3B82F6";itemSpan.style.fontWeight=cur?700:600;}
+  }
+  const row=$("plrow-"+i);
+  if(row)row.scrollIntoView({behavior:"smooth",block:"center"});
+}
+
+function chipCss(on,col){return `font-family:'IBM Plex Mono',monospace;font-size:11px;cursor:pointer;border-radius:4px;padding:6px 11px;`+(on?`color:${col};background:${col}18;border:1px solid ${col}66`:`color:#475569;background:#0F172A;border:1px solid #1E293B`);}
+function hlHTML(text,terms){text=esc(text);const ts=(terms||[]).filter(t=>t.length>=2).map(t=>t.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"));if(!ts.length)return text;return text.replace(new RegExp("("+ts.join("|")+")","gi"),m=>`<mark style="background:#3B82F644;color:#BFDBFE">${m}</mark>`);}
+
+/* build pnFirstFig after records load (first illustrated occurrence per P/N, for FIN links) */
+function buildPnFig(){const R=STATE.records;for(let i=0;i<R.length;i++){if(R[i][9]&&R[i][9].length){const k=normPN(R[i][0]);if(STATE.pnFirstFig[k]==null)STATE.pnFirstFig[k]=i;}}}
+
+if("serviceWorker" in navigator){window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));}
+init().then(buildPnFig);
+</script>
+</body>
+</html>
